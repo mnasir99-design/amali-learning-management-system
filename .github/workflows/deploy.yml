@@ -1,0 +1,58 @@
+name: Deploy AMALI to AWS Elastic Beanstalk
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18'
+        cache: 'npm'
+        
+    - name: Install dependencies
+      run: npm install
+      
+    - name: Build application
+      run: npm run build
+      
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: us-east-1
+        
+    - name: Create deployment package
+      run: |
+        mkdir -p deploy
+        cp -r dist/* deploy/ 2>/dev/null || true
+        cp -r build/* deploy/ 2>/dev/null || true
+        cp package.json deploy/
+        cp -r node_modules deploy/
+        cp -r server deploy/
+        cp -r drizzle deploy/ 2>/dev/null || true
+        cp -r shared deploy/
+        cd deploy
+        zip -r ../deploy.zip . -x "*.git*" "node_modules/.cache/*"
+        
+    - name: Deploy to Elastic Beanstalk
+      uses: einaregilsson/beanstalk-deploy@v22
+      with:
+        aws_access_key: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws_secret_key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        application_name: amali-prod
+        environment_name: amali-prod
+        version_label: ${{ github.sha }}
+        region: us-east-1
+        deployment_package: deploy.zip
+        wait_for_environment_recovery: 120
