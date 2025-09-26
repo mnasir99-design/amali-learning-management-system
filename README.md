@@ -1,4 +1,4 @@
-# BISM ALLAH ALRAHMAN ALRAHIM
+# Bism ALLAH ALRAHMAN ALRAHIM
 # AMALI Learning Management System
 
 ## Overview
@@ -102,3 +102,4 @@ This project follows modern full-stack development practices:
 ## License
 
 MIT License - see LICENSE file for details
+<!-- Deployed to AWS -->
