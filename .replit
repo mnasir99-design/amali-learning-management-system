@@ -44,3 +44,5 @@ waitForPort = 5000
 
 [agent]
 integrations = ["javascript_log_in_with_replit:1.0.0", "github:1.0.0"]
+## Recent Changes
+- Successfully deployed to AWS Elastic Beanstalk
