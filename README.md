@@ -1,4 +1,4 @@
-# Bism ALLAH ALRAHMAN ALRAHIM
+# BISM ALLAH ALRAHMAN ALRAHIM
 # AMALI Learning Management System
 
 ## Overview
