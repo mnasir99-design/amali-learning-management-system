@@ -66,11 +66,22 @@ app.use((req, res, next) => {
   // this serves both the API and the client.
   // It is the only port that is not firewalled.
   const port = parseInt(process.env.PORT || '5000', 10);
+  
+  console.log(`[SERVER] Attempting to start server on port ${port}`);
+  console.log(`[SERVER] Host: 0.0.0.0`);
+  
   server.listen({
     port,
     host: "0.0.0.0",
     reusePort: true,
   }, () => {
+    console.log(`[SERVER] Successfully started!`);
     log(`serving on port ${port}`);
+  });
+
+  // Add error handling for server startup
+  server.on('error', (err) => {
+    console.error(`[SERVER] Failed to start:`, err);
+    process.exit(1);
   });
 })();
