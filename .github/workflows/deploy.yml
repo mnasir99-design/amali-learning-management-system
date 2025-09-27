@@ -37,6 +37,7 @@ jobs:
         mkdir -p deploy
         cp -r dist deploy/ 2>/dev/null || true
         cp package.json deploy/
+        cp Procfile deploy/
         cp -r node_modules deploy/
         cp -r server deploy/
         cp -r drizzle deploy/ 2>/dev/null || true
