@@ -8,9 +8,7 @@ import memoize from "memoizee";
 import connectPg from "connect-pg-simple";
 import { storage } from "./storage";
 
-if (!process.env.REPLIT_DOMAINS) {
-  throw new Error("Environment variable REPLIT_DOMAINS not provided");
-}
+// REPLIT_DOMAINS check moved to setupAuth function for conditional AWS support
 
 const getOidcConfig = memoize(
   async () => {
@@ -107,6 +105,11 @@ export async function setupAuth(app: Express) {
     passport.serializeUser((user: Express.User, cb) => cb(null, user));
     passport.deserializeUser((user: Express.User, cb) => cb(null, user));
     return; // Skip Replit OIDC setup
+  }
+
+  // Check required environment variables for Replit auth
+  if (!process.env.REPLIT_DOMAINS) {
+    throw new Error("Environment variable REPLIT_DOMAINS not provided");
   }
 
   try {
