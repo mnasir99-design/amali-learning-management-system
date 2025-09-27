@@ -19,8 +19,21 @@ import { z } from "zod";
 import { eq } from "drizzle-orm";
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Simple debug endpoint for AWS testing
+  app.get('/debug', (req, res) => {
+    console.log(`[DEBUG] Request received for /debug`);
+    res.status(200).send(`
+      <h1>AMALI Server Debug</h1>
+      <p>Server is running!</p>
+      <p>Environment: ${process.env.NODE_ENV || 'development'}</p>
+      <p>Working Directory: ${process.cwd()}</p>
+      <p>Timestamp: ${new Date().toISOString()}</p>
+    `);
+  });
+
   // Health check endpoint for Elastic Beanstalk
   app.get('/api/health', (req, res) => {
+    console.log(`[HEALTH] Health check requested`);
     res.status(200).json({ 
       status: 'healthy', 
       timestamp: new Date().toISOString(),
@@ -30,6 +43,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Auth middleware
   await setupAuth(app);
+
+  // [Rest of the file remains unchanged - keep all your existing routes below this point]
 
   // Auth routes
   app.get('/api/auth/user', isAuthenticated, async (req: any, res) => {
