@@ -36,7 +36,7 @@ export function getSession() {
     saveUninitialized: false,
     cookie: {
       httpOnly: true,
-      secure: true,
+      secure: 'auto', // 🎯 FIXED: This now works on both HTTP and HTTPS
       maxAge: sessionTtl,
     },
   });
@@ -105,6 +105,48 @@ export async function setupAuth(app: Express) {
     // Set up a basic session serialization for AWS
     passport.serializeUser((user: Express.User, cb) => cb(null, user));
     passport.deserializeUser((user: Express.User, cb) => cb(null, user));
+    
+    // Add demo login routes for AWS
+    app.get("/api/login", async (req, res) => {
+      console.log('[AUTH] AWS demo login requested');
+      try {
+        // Create demo user with organization
+        const demoUserId = "aws-demo-user-123";
+        const claims = {
+          sub: demoUserId,
+          email: "admin@amali-demo.com",
+          first_name: "Demo",
+          last_name: "Admin",
+          name: "Demo Admin"
+        };
+
+        // Ensure demo user exists in database
+        await upsertUser(claims);
+
+        // Mock authentication for demo purposes
+        const mockUser = { claims };
+        
+        req.login(mockUser, (err) => {
+          if (err) {
+            console.error('[AUTH] Login error:', err);
+            return res.status(500).json({ error: 'Login failed' });
+          }
+          console.log('[AUTH] Demo login successful');
+          res.redirect('/');
+        });
+      } catch (error) {
+        console.error('[AUTH] Demo login setup error:', error);
+        res.status(500).json({ error: 'Login setup failed' });
+      }
+    });
+    
+    app.get("/api/logout", (req, res) => {
+      console.log('[AUTH] AWS demo logout requested');
+      req.logout(() => {
+        res.redirect('/');
+      });
+    });
+    
     return; // Skip Replit OIDC setup
   }
 
@@ -158,43 +200,67 @@ export async function setupAuth(app: Express) {
     });
 
     app.get("/api/logout", (req, res) => {
-      req.logout((err) => {
-        if (err) {
-          return res.status(500).json({ message: "Logout failed" });
-        }
-        res.redirect("/");
+      req.logout(() => {
+        res.redirect(
+          client.buildEndSessionUrl(config, {
+            client_id: process.env.REPL_ID!,
+            post_logout_redirect_uri: `${req.protocol}://${req.hostname}`,
+          }).href
+        );
       });
     });
   } catch (error) {
-    console.error('Failed to set up Replit authentication:', error);
-    throw error;
+    console.error('[AUTH] Failed to setup Replit authentication:', error);
+    console.log('[AUTH] Continuing without authentication...');
+    // Set up basic session serialization as fallback
+    passport.serializeUser((user: Express.User, cb) => cb(null, user));
+    passport.deserializeUser((user: Express.User, cb) => cb(null, user));
+    return;
   }
 }
 
-export const isAuthenticated: RequestHandler = (req: any, res, next) => {
-  // AWS environment: create mock user for demo
-  const isAWSEnvironment = process.env.NODE_ENV === 'production' || 
-    !process.env.REPL_ID || 
-    !process.env.REPLIT_DOMAINS;
+export const isAuthenticated: RequestHandler = async (req, res, next) => {
+  // Check if we're in AWS environment - bypass authentication for testing
+  const isAWSEnvironment = process.env.NODE_ENV === 'production' && 
+    process.env.REPLIT_DOMAINS?.includes('elasticbeanstalk.com');
 
   if (isAWSEnvironment) {
-    // Create a mock user for AWS demo
-    req.user = {
+    // Create a mock user for AWS environment to allow testing
+    (req as any).user = {
       claims: {
-        sub: "aws-demo-user-123",
-        email: "admin@amali-demo.com",
-        first_name: "Demo",
-        last_name: "Admin",
-        profile_image_url: null
+        sub: 'aws-demo-user',
+        email: 'demo@aws.com',
+        first_name: 'AWS',
+        last_name: 'Demo'
       }
     };
     return next();
   }
 
-  // Replit environment: check actual authentication
-  if (req.isAuthenticated && req.isAuthenticated()) {
+  const user = req.user as any;
+
+  if (!req.isAuthenticated() || !user.expires_at) {
+    return res.status(401).json({ message: "Unauthorized" });
+  }
+
+  const now = Math.floor(Date.now() / 1000);
+  if (now <= user.expires_at) {
     return next();
   }
-  
-  res.status(401).json({ message: "Unauthorized" });
+
+  const refreshToken = user.refresh_token;
+  if (!refreshToken) {
+    res.status(401).json({ message: "Unauthorized" });
+    return;
+  }
+
+  try {
+    const config = await getOidcConfig();
+    const tokenResponse = await client.refreshTokenGrant(config, refreshToken);
+    updateUserSession(user, tokenResponse);
+    return next();
+  } catch (error) {
+    res.status(401).json({ message: "Unauthorized" });
+    return;
+  }
 };
