@@ -42,6 +42,9 @@ jobs:
         cp -r server deploy/
         cp -r drizzle deploy/ 2>/dev/null || true
         cp -r shared deploy/
+        # Ensure static files are in dist/public for production server
+        mkdir -p deploy/dist/public 2>/dev/null || true
+        cp -r dist/public/* deploy/dist/public/ 2>/dev/null || true
         cd deploy
         zip -r ../deploy.zip . -x "*.git*" "node_modules/.cache/*"
         
