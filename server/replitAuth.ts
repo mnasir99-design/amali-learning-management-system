@@ -57,7 +57,7 @@ async function upsertUser(
 ) {
   // Check if user exists
   const existingUser = await storage.getUser(claims["sub"]);
-  
+
   if (!existingUser) {
     // Create default organization for new users
     const organization = await storage.createOrganization({
@@ -96,9 +96,10 @@ export async function setupAuth(app: Express) {
   app.use(passport.session());
 
   // Check if we're in an AWS environment or if Replit auth should be disabled
-  const isAWSEnvironment = process.env.NODE_ENV === 'production' && 
-    process.env.REPLIT_DOMAINS?.includes('elasticbeanstalk.com');
-  
+  const isAWSEnvironment = process.env.NODE_ENV === 'production' || 
+    !process.env.REPL_ID || 
+    !process.env.REPLIT_DOMAINS;
+
   if (isAWSEnvironment) {
     console.log('[AUTH] Running in AWS environment - Replit authentication disabled');
     // Set up a basic session serialization for AWS
@@ -157,67 +158,43 @@ export async function setupAuth(app: Express) {
     });
 
     app.get("/api/logout", (req, res) => {
-      req.logout(() => {
-        res.redirect(
-          client.buildEndSessionUrl(config, {
-            client_id: process.env.REPL_ID!,
-            post_logout_redirect_uri: `${req.protocol}://${req.hostname}`,
-          }).href
-        );
+      req.logout((err) => {
+        if (err) {
+          return res.status(500).json({ message: "Logout failed" });
+        }
+        res.redirect("/");
       });
     });
   } catch (error) {
-    console.error('[AUTH] Failed to setup Replit authentication:', error);
-    console.log('[AUTH] Continuing without authentication...');
-    // Set up basic session serialization as fallback
-    passport.serializeUser((user: Express.User, cb) => cb(null, user));
-    passport.deserializeUser((user: Express.User, cb) => cb(null, user));
-    return;
+    console.error('Failed to set up Replit authentication:', error);
+    throw error;
   }
 }
 
-export const isAuthenticated: RequestHandler = async (req, res, next) => {
-  // Check if we're in AWS environment - bypass authentication for testing
-  const isAWSEnvironment = process.env.NODE_ENV === 'production' && 
-    process.env.REPLIT_DOMAINS?.includes('elasticbeanstalk.com');
-  
+export const isAuthenticated: RequestHandler = (req: any, res, next) => {
+  // AWS environment: create mock user for demo
+  const isAWSEnvironment = process.env.NODE_ENV === 'production' || 
+    !process.env.REPL_ID || 
+    !process.env.REPLIT_DOMAINS;
+
   if (isAWSEnvironment) {
-    // Create a mock user for AWS environment to allow testing
-    (req as any).user = {
+    // Create a mock user for AWS demo
+    req.user = {
       claims: {
-        sub: 'aws-demo-user',
-        email: 'demo@aws.com',
-        first_name: 'AWS',
-        last_name: 'Demo'
+        sub: "aws-demo-user-123",
+        email: "admin@amali-demo.com",
+        first_name: "Demo",
+        last_name: "Admin",
+        profile_image_url: null
       }
     };
     return next();
   }
 
-  const user = req.user as any;
-
-  if (!req.isAuthenticated() || !user.expires_at) {
-    return res.status(401).json({ message: "Unauthorized" });
-  }
-
-  const now = Math.floor(Date.now() / 1000);
-  if (now <= user.expires_at) {
+  // Replit environment: check actual authentication
+  if (req.isAuthenticated && req.isAuthenticated()) {
     return next();
   }
-
-  const refreshToken = user.refresh_token;
-  if (!refreshToken) {
-    res.status(401).json({ message: "Unauthorized" });
-    return;
-  }
-
-  try {
-    const config = await getOidcConfig();
-    const tokenResponse = await client.refreshTokenGrant(config, refreshToken);
-    updateUserSession(user, tokenResponse);
-    return next();
-  } catch (error) {
-    res.status(401).json({ message: "Unauthorized" });
-    return;
-  }
+  
+  res.status(401).json({ message: "Unauthorized" });
 };
