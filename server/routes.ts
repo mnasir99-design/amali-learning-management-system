@@ -44,8 +44,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Auth middleware
   await setupAuth(app);
 
-  // [Rest of the file remains unchanged - keep all your existing routes below this point]
-
   // Auth routes
   app.get('/api/auth/user', isAuthenticated, async (req: any, res) => {
     try {
@@ -86,6 +84,58 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching dashboard stats:", error);
       res.status(500).json({ message: "Failed to fetch dashboard stats" });
+    }
+  });
+
+  // Teacher-specific routes
+  app.get('/api/teacher/stats', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const user = await storage.getUser(userId);
+      
+      if (user?.role !== 'teacher' && user?.role !== 'admin') {
+        return res.status(403).json({ message: "Insufficient permissions" });
+      }
+
+      const stats = await storage.getTeacherInsights(userId);
+      res.json(stats);
+    } catch (error) {
+      console.error("Error fetching teacher stats:", error);
+      res.status(500).json({ message: "Failed to fetch teacher stats" });
+    }
+  });
+
+  app.get('/api/teacher/courses', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const user = await storage.getUser(userId);
+      
+      if (user?.role !== 'teacher' && user?.role !== 'admin') {
+        return res.status(403).json({ message: "Insufficient permissions" });
+      }
+
+      const courses = await storage.getCoursesByTeacher(userId);
+      res.json(courses);
+    } catch (error) {
+      console.error("Error fetching teacher courses:", error);
+      res.status(500).json({ message: "Failed to fetch teacher courses" });
+    }
+  });
+
+  app.get('/api/teacher/students', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const user = await storage.getUser(userId);
+      
+      if (user?.role !== 'teacher' && user?.role !== 'admin') {
+        return res.status(403).json({ message: "Insufficient permissions" });
+      }
+
+      const students = await storage.getStudentsByTeacher(userId);
+      res.json(students);
+    } catch (error) {
+      console.error("Error fetching teacher students:", error);
+      res.status(500).json({ message: "Failed to fetch teacher students" });
     }
   });
 
@@ -143,7 +193,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         courses = await storage.getCoursesByOrganization(user.organizationId!);
       }
 
-      res.json(courses);
+      res.json(courses || []);
     } catch (error) {
       console.error("Error fetching courses:", error);
       res.status(500).json({ message: "Failed to fetch courses" });
@@ -226,6 +276,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get('/api/lessons/recent', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const user = await storage.getUser(userId);
+      
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      const recentLessons = await storage.getRecentLessons(userId, user.organizationId!);
+      res.json(recentLessons || []);
+    } catch (error) {
+      console.error("Error fetching recent lessons:", error);
+      res.status(500).json({ message: "Failed to fetch recent lessons" });
+    }
+  });
+
   // Assignments routes
   app.post('/api/assignments', isAuthenticated, async (req: any, res) => {
     try {
@@ -249,6 +316,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Invalid assignment data", errors: error.errors });
       }
       res.status(500).json({ message: "Failed to create assignment" });
+    }
+  });
+
+  app.get('/api/assignments', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const user = await storage.getUser(userId);
+      
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      let assignments;
+      if (user.role === 'teacher' || user.role === 'admin') {
+        assignments = await storage.getAssignmentsByTeacher(userId);
+      } else if (user.role === 'student') {
+        assignments = await storage.getAssignmentsForStudent(userId);
+      }
+
+      res.json(assignments || []);
+    } catch (error) {
+      console.error("Error fetching assignments:", error);
+      res.status(500).json({ message: "Failed to fetch assignments" });
     }
   });
 
@@ -376,6 +466,74 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Invalid progress data", errors: error.errors });
       }
       res.status(500).json({ message: "Failed to update progress" });
+    }
+  });
+
+  app.get('/api/progress', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const progress = await storage.getStudentProgress(userId);
+      res.json(progress || []);
+    } catch (error) {
+      console.error("Error fetching progress:", error);
+      res.status(500).json({ message: "Failed to fetch progress" });
+    }
+  });
+
+  app.get('/api/progress/streak', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const streak = await storage.getStudentStreak(userId);
+      res.json(streak || { streak: 0, lastActiveDate: null });
+    } catch (error) {
+      console.error("Error fetching streak:", error);
+      res.status(500).json({ message: "Failed to fetch streak" });
+    }
+  });
+
+  // Gamification routes
+  app.get('/api/achievements', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const user = await storage.getUser(userId);
+      
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      const achievements = await storage.getUserAchievements(userId);
+      res.json(achievements || []);
+    } catch (error) {
+      console.error("Error fetching achievements:", error);
+      res.status(500).json({ message: "Failed to fetch achievements" });
+    }
+  });
+
+  // Messaging routes
+  app.get('/api/conversations', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const conversations = await storage.getUserConversations(userId);
+      res.json(conversations || []);
+    } catch (error) {
+      console.error("Error fetching conversations:", error);
+      res.status(500).json({ message: "Failed to fetch conversations" });
+    }
+  });
+
+  app.get('/api/messages', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { conversationId } = req.query;
+      
+      const messages = conversationId 
+        ? await storage.getConversationMessages(conversationId as string)
+        : await storage.getRecentMessages(userId);
+        
+      res.json(messages || []);
+    } catch (error) {
+      console.error("Error fetching messages:", error);
+      res.status(500).json({ message: "Failed to fetch messages" });
     }
   });
 
