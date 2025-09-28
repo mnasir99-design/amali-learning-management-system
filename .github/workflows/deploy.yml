@@ -35,7 +35,9 @@ jobs:
     - name: Create deployment package
       run: |
         mkdir -p deploy
-        cp -r dist deploy/ 2>/dev/null || true
+        run: |
+     mkdir -p deploy
+     cp -r client/dist deploy/dist 2>/dev/null || true
         cp package.json deploy/
         cp Procfile deploy/
         cp -r node_modules deploy/
